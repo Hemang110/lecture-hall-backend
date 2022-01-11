@@ -58,9 +58,8 @@ app.post("/login", function (req, res, next) {
     }
     req.login(user, (err) => {
       if (err) throw err;
-      if (user[0].designation === "admin")
-        res.status(201).send("Admin Success");
-      else res.status(200).send("Successfully Authenticated");
+      if (user[0].designation === "admin") res.status(201).send(user);
+      else res.status(200).send(user);
     });
   })(req, res, next);
 });
@@ -71,7 +70,7 @@ app.post("/lecturehall/available", async (req, res) => {
 
   const sql =
     "select * from lecture_hall " +
-    "where max_capacity > " +
+    "where max_capacity >= " +
     req.body.capacity +
     " " +
     "and lh_id not in(" +
@@ -102,7 +101,9 @@ app.post("/lecturehall/booked", async (req, res) => {
     "' and " +
     "b.alloc_end = '" +
     req.body.end +
-    "'";
+    "' " +
+    "and max_capacity >= " +
+    req.body.capacity;
 
   db.query(sql, (err, result) => {
     if (err) throw err;
@@ -127,10 +128,10 @@ app.post("/lecturehall/available/:lh_id", (req, res) => {
     "'," +
     req.body.status +
     ")";
-
+  console.log(sql);
   db.query(sql, (err, result) => {
     if (err) throw err;
-    res.send({ msg: "Lecture Hall is booked", result });
+    res.send(result);
   });
 });
 
@@ -233,46 +234,75 @@ app.get("/users", (req, res) => {
   });
 });
 
+// GET Pending Bookings
+app.get("/admin/pending", (req, res) => {
+  db.query(
+    "SELECT * FROM booking WHERE booking_status = 2",
+    (err, result, fields) => {
+      if (err) throw err;
+      res.send(result);
+    }
+  );
+});
+
+// Approve Bookings
+app.post("/admin/approve/:booking_id", (req, res) => {
+  db.query(
+    "UPDATE booking SET booking_status = 1 WHERE booking_id = " +
+      req.params.booking_id,
+    (err, result, fields) => {
+      if (err) throw err;
+      res.send(result);
+    }
+  );
+});
+
 // Allocate from parsed CSV
 app.post("/allocate", (req, res) => {
   console.log("req: ", req.body);
   res.send("Successfully allocated");
 });
-app.post('/lecturehall/profile/searchemail', function(req, res)
-{
-  if (!req.body.email){
-  res.status(400).send({ msg: "Invalid Input" });}
-  else{
-  var email = req.body.email;
-  console.log(email);
-  const sql =
-  "SELECT * FROM user WHERE email ='"+
-        email+"'";
+app.post("/lecturehall/profile/searchemail", function (req, res) {
+  if (!req.body.email) {
+    res.status(400).send({ msg: "Invalid Input" });
+  } else {
+    var email = req.body.email;
+    console.log(email);
+    const sql = "SELECT * FROM user WHERE email ='" + email + "'";
+    db.query(sql, (err, result) => {
+      if (err) throw err;
+      res.send(result);
+    });
+  }
+});
+
+app.get("/lecturehall/allocated/:user_id", (req, res) => {
+  const sql = `SELECT * FROM booking WHERE user_id = ${req.params.user_id}`;
   db.query(sql, (err, result) => {
     if (err) throw err;
     res.send(result);
   });
-  }
 });
-app.put('/lecturehall/profile/updateemail', function (req, res) {
-  var newemail= req.body.newemail;
+
+app.put("/lecturehall/profile/updateemail", function (req, res) {
+  var newemail = req.body.newemail;
   var oldemail = req.body.oldemail;
   const sql =
-  "update user " +
-  "set email = '" +
-  newemail + "' where email = '" +
-  oldemail + "'";
+    "update user " +
+    "set email = '" +
+    newemail +
+    "' where email = '" +
+    oldemail +
+    "'";
 
-db.query(sql, (err, result) => {
-  console.log(result.message);
-  if (err) throw err;
-  if(result.affectedRows!=0)
-  res.status(200).send("ok");
-  else{
-    res.status(404).send("Not found");
-  }
-
-});
+  db.query(sql, (err, result) => {
+    console.log(result.message);
+    if (err) throw err;
+    if (result.affectedRows != 0) res.status(200).send("ok");
+    else {
+      res.status(404).send("Not found");
+    }
+  });
 });
 app.put('/lecturehall/profile/updatemobile', function (req, res) {
   var newphone= req.body.newphone;
@@ -295,21 +325,20 @@ db.query(sql, (err, result) => {
 });
 });
 
-app.put('/lecturehall/profile', function (req, res) {
-  if (!req.body.password)
-  return res.status(400).send({ msg: "Invalid Input" });
+app.put("/lecturehall/profile", function (req, res) {
+  if (!req.body.password) return res.status(400).send({ msg: "Invalid Input" });
   var password = req.body.password;
   const sql =
-  "update user " +
-  "set password = " +
-  password +
-  "where user_id = " +
-  user_id;
-  
-db.query(sql, (err, result) => {
-  if (err) throw err;
-  res.send({ msg: "Incorrect password", result });
-}); 
+    "update user " +
+    "set password = " +
+    password +
+    "where user_id = " +
+    user_id;
+
+  db.query(sql, (err, result) => {
+    if (err) throw err;
+    res.send({ msg: "Incorrect password", result });
+  });
 });
 
 app.get("/", (req, res) => {
